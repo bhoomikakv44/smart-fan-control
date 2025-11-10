@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Smart Fan Control — BLE Serial</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif}
+body{background:linear-gradient(135deg,#f5f7fa 0%,#c3cfe2 100%);min-height:100vh;padding:30px;}
+.container{max-width:800px;margin:0 auto;background:white;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,0.1);overflow:hidden;}
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 30px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;}
+.nav-title{font-size:24px;font-weight:600;}
+.btn{padding:12px 25px;border:none;border-radius:10px;cursor:pointer;transition:all 0.3s ease;font-weight:500;display:flex;align-items:center;gap:8px;}
+.btn-primary{background:#4CAF50;color:white;}
+.btn-secondary{background:#2196F3;color:white;}
+.btn-back{background:#607D8B;color:white;transition:all 0.3s ease;}
+.status-card{background:white;padding:25px;border-radius:15px;box-shadow:0 4px 12px rgba(0,0,0,0.08);margin:20px;}
+.speed-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:20px 0;}
+.speed-btn{padding:20px 0;border:none;border-radius:10px;background:#f0f0f0;cursor:pointer;font-weight:bold;font-size:18px;transition:all 0.3s ease;}
+.speed-btn.active{background:#2196F3 !important;color:white;transform:scale(1.1);}
+.speed-btn.disabled{background:#ddd !important;color:#777;cursor:not-allowed;}
+.mode-disabled{opacity:0.6;pointer-events:none;}
+.sensor-display{text-align:center;padding:30px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;border-radius:15px;margin:20px;}
+.sensor-value{font-size:36px;font-weight:600;margin:10px 0;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:white;padding:15px 30px;border-radius:25px;font-size:14px;opacity:0;transition:opacity 0.3s;pointer-events:none;}
+.show-toast{opacity:1;}
+.connect-area{display:flex;gap:10px;align-items:center;}
+.status-dot{width:10px;height:10px;border-radius:50%;background:#f44336;display:inline-block;margin-right:8px;}
+.status-dot.connected{background:#4CAF50;}
+@media(max-width:600px){.speed-grid{grid-template-columns:repeat(3,1fr);}}
+</style>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#667eea">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js").then(() => {
+      console.log("✅ Service Worker registered for Smart Fan Control.");
+    });
+  });
+}
+</script>
+
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div id="page1" class="container">
+  <div class="nav-bar">
+    <div class="nav-title">Smart Fan Control — BLE Serial</div>
+    <div class="connect-area">
+      <span id="connDot" class="status-dot"></span>
+      <div id="deviceName" style="color:white;margin-right:8px;font-weight:500;">Not connected</div>
+      <button id="connectBtn" class="btn btn-primary" onclick="bleConnect()"><i class="fas fa-plug"></i> Connect</button>
+      <button id="disconnectBtn" class="btn btn-back" onclick="bleDisconnect()" style="display:none;"><i class="fas fa-unlink"></i> Disconnect</button>
+    </div>
+  </div>
+  <div class="status-card">
+    <div style="display:flex;flex-direction:column;gap:15px;">
+      <button class="btn btn-primary" onclick="toggleStatus('bluetooth')">
+        <i class="fas fa-bluetooth"></i> Bluetooth
+        <span id="bluetoothStatus" style="margin-left:auto;">Off</span>
+      </button>
+      <button class="btn btn-secondary" onclick="toggleStatus('wifi')">
+        <i class="fas fa-wifi"></i> WiFi
+        <span id="wifiStatus" style="margin-left:auto;">Off</span>
+      </button>
+      <button class="btn btn-primary" onclick="goToPage('page2')"><i class="fas fa-fan"></i> Fan Control</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2 -->
+<div id="page2" class="container" style="display:none;">
+  <div class="nav-bar">
+    <div class="nav-title">Fan Settings</div>
+    <button class="btn btn-back" onclick="goToPage('page1')"><i class="fas fa-arrow-left"></i> Back</button>
+  </div>
+
+  <div class="status-card">
+    <div style="display:flex;gap:10px;margin-bottom:25px;">
+      <button id="powerOn" class="btn btn-primary active" onclick="togglePower('on')"><i class="fas fa-power-off"></i> Power On</button>
+      <button id="powerOff" class="btn" style="background:#f44336;color:white;" onclick="togglePower('off')">Power Off</button>
+    </div>
+
+    <div style="margin-bottom:25px;">
+      <h3>Operation Mode</h3>
+      <div style="display:flex;gap:10px;margin-top:15px;">
+        <button id="autoMode" class="btn btn-secondary active" onclick="setMode('auto')"><i class="fas fa-robot"></i> Auto</button>
+        <button id="manualMode" class="btn btn-secondary" onclick="setMode('manual')"><i class="fas fa-hand-paper"></i> Manual</button>
+      </div>
+    </div>
+
+    <div>
+      <h3>Fan Speed</h3>
+      <div class="speed-grid">
+        <button class="speed-btn" onclick="setSpeed(1)">1</button>
+        <button class="speed-btn" onclick="setSpeed(2)">2</button>
+        <button class="speed-btn" onclick="setSpeed(3)">3</button>
+        <button class="speed-btn" onclick="setSpeed(4)">4</button>
+        <button class="speed-btn" onclick="setSpeed(5)">5</button>
+        <button class="speed-btn" onclick="setSpeed(6)">6</button>
+      </div>
+    </div>
+
+    <button class="btn btn-secondary" style="margin-top:25px;width:100%;" onclick="goToPage('page3')"><i class="fas fa-chart-line"></i> View Status</button>
+  </div>
+</div>
+
+<!-- PAGE 3 -->
+<div id="page3" class="container" style="display:none;">
+  <div class="nav-bar">
+    <div class="nav-title">System Status</div>
+    <button class="btn btn-back" onclick="goToPage('page2')"><i class="fas fa-arrow-left"></i> Back</button>
+  </div>
+
+  <div class="sensor-display">
+    <div class="sensor-item">
+      <i class="fas fa-thermometer-half fa-2x"></i>
+      <div class="sensor-value" id="temperature">--°C</div>
+      <div>Temperature</div>
+    </div>
+    <div class="sensor-item" style="margin-top:30px;">
+      <i class="fas fa-tint fa-2x"></i>
+      <div class="sensor-value" id="humidity">--%</div>
+      <div>Humidity</div>
+    </div>
+    <div style="margin-top:18px;color:white;font-weight:500;" id="lastSeen">Last update: --</div>
+  </div>
+</div>
+
+<div id="toast" class="toast">Settings Updated</div>
+
+<script>
+let bleDevice=null,gattServer=null,uartService=null,txChar=null,rxChar=null;
+const NUS_SERVICE_UUID='6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const NUS_RX_CHAR_UUID='6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+const NUS_TX_CHAR_UUID='6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show-toast');setTimeout(()=>t.classList.remove('show-toast'),2000);}
+function updateConnUI(c){document.getElementById('connDot').classList.toggle('connected',c);document.getElementById('connectBtn').style.display=c?'none':'inline-flex';document.getElementById('disconnectBtn').style.display=c?'inline-flex':'none';document.getElementById('deviceName').textContent=c?(bleDevice?.name||'Unknown device'):'Not connected';}
+function goToPage(p){['page1','page2','page3'].forEach(id=>document.getElementById(id).style.display=id===p?'block':'none');}
+function toggleStatus(dev){const s=document.getElementById(dev+'Status');const cs=s.textContent==='On'?'Off':'On';s.textContent=cs;showToast(`${dev} ${cs}`);
+ if(dev==='bluetooth'){const c=document.getElementById('connectBtn');c.disabled=(cs==='Off');c.style.opacity=cs==='Off'?'0.5':'1';c.style.cursor=cs==='Off'?'not-allowed':'pointer';}
+ if(isConnected())sendCommand(`${dev.toUpperCase()}:${cs.toUpperCase()}`);}
+function disableModes(dis){document.getElementById('autoMode').classList.toggle('mode-disabled',dis);
+document.getElementById('manualMode').classList.toggle('mode-disabled',dis);
+document.querySelectorAll('.speed-btn').forEach(b=>b.classList.toggle('disabled',dis));}
+function togglePower(state){const on=document.getElementById('powerOn'),off=document.getElementById('powerOff');
+ if(state==='on'){on.classList.add('active');off.style.background='#f0f0f0';off.style.color='#333';disableModes(false);showToast('Fan Powered On');if(isConnected())sendCommand('POWER:ON');}
+ else{on.classList.remove('active');off.style.background='#f44336';off.style.color='white';disableModes(true);document.querySelectorAll('.speed-btn').forEach(b=>b.classList.remove('active'));showToast('Fan Powered Off');if(isConnected())sendCommand('POWER:OFF');}}
+function setMode(m){if(document.getElementById('autoMode').classList.contains('mode-disabled'))return;
+const a=document.getElementById('autoMode'),man=document.getElementById('manualMode');a.classList.toggle('active',m==='auto');man.classList.toggle('active',m==='manual');
+if(m==='auto'){document.querySelectorAll('.speed-btn').forEach(b=>b.classList.remove('active'));showToast('Automatic Mode Activated');if(isConnected())sendCommand('MODE:AUTO');}
+else{showToast('Manual Mode Activated');if(isConnected())sendCommand('MODE:MANUAL');}}
+function setSpeed(s){if(document.getElementById('manualMode').classList.contains('mode-disabled'))return;
+if(!document.getElementById('manualMode').classList.contains('active')){showToast('Switch to Manual Mode');return;}
+document.querySelectorAll('.speed-btn').forEach(b=>b.classList.remove('active'));
+const btn=[...document.querySelectorAll('.speed-btn')].find(b=>b.innerText.trim()==String(s));if(btn)btn.classList.add('active');
+showToast(`Fan speed set to ${s}`);if(isConnected())sendCommand(`SPEED:${s}`);}
+function isConnected(){return bleDevice&&bleDevice.gatt&&bleDevice.gatt.connected;}
+async function bleConnect(){if(!navigator.bluetooth){showToast('Bluetooth not supported');return;}
+if(document.getElementById('bluetoothStatus').textContent!=='On'){showToast('Turn Bluetooth On first');return;}
+try{showToast('Requesting device...');const d=await navigator.bluetooth.requestDevice({filters:[{services:[NUS_SERVICE_UUID]}],optionalServices:[NUS_SERVICE_UUID]});if(!d)return;bleDevice=d;bleDevice.addEventListener('gattserverdisconnected',onDisconnected);
+showToast('Connecting...');gattServer=await d.gatt.connect();uartService=await gattServer.getPrimaryService(NUS_SERVICE_UUID);
+rxChar=await uartService.getCharacteristic(NUS_RX_CHAR_UUID);txChar=await uartService.getCharacteristic(NUS_TX_CHAR_UUID);
+await txChar.startNotifications();txChar.addEventListener('characteristicvaluechanged',handleNotifications);
+updateConnUI(true);showToast('BLE connected');}catch(e){console.error(e);showToast('Connection failed');}}
+async function bleDisconnect(){if(bleDevice&&bleDevice.gatt.connected)bleDevice.gatt.disconnect();updateConnUI(false);showToast('Disconnected');}
+function onDisconnected(){updateConnUI(false);showToast('Device disconnected');}
+async function sendCommand(t){if(!isConnected()||!rxChar)return;try{const e=new TextEncoder(),d=e.encode(t+'\n');await rxChar.writeValue(d);}catch(e){console.error(e);showToast('Send failed');}}
+function handleNotifications(e){const v=new TextDecoder('utf-8').decode(e.target.value);parseIncoming(v.trim());}
+function parseIncoming(p){const parts=p.split(/[\r\n;]+/).map(x=>x.trim()).filter(Boolean);let u=false;for(const part of parts){if(part.includes(':')){const [k,v]=part.split(':');if(k.toUpperCase().includes('TEMP')){document.getElementById('temperature').textContent=`${parseFloat(v)}°C`;u=true;}
+if(k.toUpperCase().includes('HUM')){document.getElementById('humidity').textContent=`${parseFloat(v)}%`;u=true;}}}
+if(u)document.getElementById('lastSeen').textContent='Last update: '+new Date().toLocaleTimeString();}
+function updateSensorDataSimulated(){if(!isConnected()){const t=(24+Math.random()*6).toFixed(1);const h=(45+Math.random()*25).toFixed(0);
+document.getElementById('temperature').textContent=`${t}°C`;document.getElementById('humidity').textContent=`${h}%`;document.getElementById('lastSeen').textContent='Last update: '+new Date().toLocaleTimeString();}}
+setInterval(updateSensorDataSimulated,3000);
+updateConnUI(false);const cbtn=document.getElementById('connectBtn');cbtn.disabled=true;cbtn.style.opacity='0.5';cbtn.style.cursor='not-allowed';
+window.goToPage=goToPage;window.toggleStatus=toggleStatus;window.togglePower=togglePower;window.setMode=setMode;window.setSpeed=setSpeed;window.bleConnect=bleConnect;window.bleDisconnect=bleDisconnect;
+</script>
+</body>
+</html>
